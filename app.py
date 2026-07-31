@@ -81,9 +81,9 @@ def ask_smart_agent(user_text, uploaded_files, history, username):
 
     if is_drawing:
         try:
-            # 呼叫 Google Imagen 3 藝術模型
+            # ✅ 使用 2026 最新官方支援的 Imagen 4 模型
             result = client.models.generate_images(
-                model='imagen-3.0-generate-001',
+                model='imagen-4.0-generate-001',
                 prompt=user_text,
                 config={"number_of_images": 1, "output_mime_type": "image/jpeg"}
             )
