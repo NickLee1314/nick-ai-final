@@ -79,7 +79,7 @@ def ask_smart_agent(user_text, uploaded_files, history, username):
     draw_keywords = ["幫我畫", "畫一", "產圖", "生成圖片", "產生圖片", "畫出", "畫張","畫", "圖", "產出", "生成", "生一張"]
     is_drawing = any(k in user_text for k in draw_keywords)
 
-   if is_drawing:
+    if is_drawing:
         try:
             # ✅【V25 終極產圖修復】使用最新原生模型，且全面改用最新的 generate_content 方法
             result = client.models.generate_content(
