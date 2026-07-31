@@ -3,3 +3,5 @@ duckduckgo-search
 supabase
 gradio
 schedule
+python-docx
+fpdf2
