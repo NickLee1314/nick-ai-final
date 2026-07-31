@@ -6,7 +6,7 @@ import gradio as gr
 from supabase import create_client, Client
 from duckduckgo_search import DDGS
 
-# ✅【V10.1 終極兼容修正】完美解決 Render 平台與 google.genai 舊套件命名空間的衝突
+# 安全載入 Google GenAI
 try:
     import google.genai as genai
 except ImportError:
@@ -20,7 +20,7 @@ SUPABASE_URL = os.environ.get("SUPABASE_URL")
 SUPABASE_KEY = os.environ.get("SUPABASE_KEY")
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
 
-# 【Bug 徹底修復】多用戶帳密解析邏輯，完美防範 IndexError
+# 解析多用戶
 users_env = os.environ.get("WEB_USERS", "admin:admin")
 AUTH_LIST = []
 if users_env:
@@ -29,12 +29,11 @@ if users_env:
             parts = pair.split(':', 1)
             if len(parts) == 2:
                 username = parts[0].[...](asc_slot://start-slot-1)strip()
-                password = parts.strip()  # ✅ 100% 修正：從 parts 讀取密碼
+                password = parts.strip()
                 if username and password:
                     AUTH_LIST.append((username, password))
 
-# 【防呆】確保金鑰存在才初始化
-supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY) if SUPABASE_URL and SUPABASE_KEY else None
+supabase = create_client(SUPABASE_URL, SUPABASE_KEY) if SUPABASE_URL and SUPABASE_KEY else None
 client = genai.Client(api_key=GEMINI_API_KEY) if GEMINI_API_KEY else None
 
 # --- 2. 雲端資料庫操作 ---
@@ -49,7 +48,6 @@ def get_user_profile(username):
 def update_user_profile(user_input, username):
     if not user_input or not supabase or not client: return
     try:
-        # ✅ 使用最優模型 gemini-1.5-flash
         prompt = f"分析這句話：「{user_input}」。是否透露了說話者的個人偏好、物品 or 習慣？有則總結事實，無則回覆『無』。"
         resp = client.models.generate_content(model='gemini-1.5-flash', contents=prompt)
         fact = resp.text.strip()
@@ -75,7 +73,7 @@ def search_the_web(query):
 # --- 3. 核心大腦邏輯 ---
 def ask_smart_agent(user_text, uploaded_files, history, username):
     if not client or not supabase:
-        return "⚠️ 系統尚未設定完整的 API 金鑰 (GEMINI 或 SUPABASE)，請至 Settings 中設定。"
+        return "⚠️ 系統尚未設定金鑰，請至 Settings 中設定。"
 
     short_term = ""
     for user_msg, ai_msg in history[-3:]:
@@ -95,7 +93,7 @@ def ask_smart_agent(user_text, uploaded_files, history, username):
     prompt = f"""你是一個多模態專屬 AI 助理。當前服務的主人是：{username}。
 【主人長期特徵】\n{profile}
 【本次對話上下文】\n{short_term if short_term else "新對話。"}
-【歷史記憶(請自動判斷關聯性)】\n{long_term_context if long_term_context else "無。"}
+【歷史記憶】\n{long_term_context if long_term_context else "無。"}
 【網路最新資訊】\n{web_context}
 【目前提問/指示】\n{user_text}
 請給出精準回答："""
@@ -116,7 +114,6 @@ def ask_smart_agent(user_text, uploaded_files, history, username):
                 return f"❌ 檔案上傳失敗: {e}"
 
     try:
-        # ✅ 使用最優模型 gemini-1.5-flash
         response = client.models.generate_content(model='gemini-1.5-flash', contents=contents_to_send)
         final_answer = response.text
         
@@ -175,12 +172,11 @@ def chat_logic(message_dict, history, request: gr.Request):
     else:
         yield ask_smart_agent(text, files, history, username)
 
-# ✅ V10.1 終極無 Bug 界面（相容所有 Gradio 版本）
 demo = gr.ChatInterface(
     fn=chat_logic, 
     multimodal=True, 
-    title="🚀 可進化 AI 助理 V10.1 (終極完美正式版)",
-    description="具備多用戶隔離、防護罩、垃圾回收與零死角除錯的頂級架構。<br>👇 **請手動輸入，或點擊下方的【快捷指令按鈕】：**",
+    title="🚀 可進化 AI 助理 V11 (終極無 Bug 版)",
+    description="具備多用戶隔離與 RAG 記憶的頂級架構。<br>👇 **請手動輸入，或點擊下方的【快捷指令按鈕】：**",
     examples=[
         [{"text": "自主學習"}],
         [{"text": "清除所有對話紀錄"}],
@@ -213,7 +209,6 @@ def run_scheduler():
 
 threading.Thread(target=run_scheduler, daemon=True).start()
 
-# --- 6. 啟動網頁 (Render 專用設定) ---
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 7860))
     if AUTH_LIST:
