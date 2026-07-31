@@ -76,7 +76,7 @@ def ask_smart_agent(user_text, uploaded_files, history, username):
         return "⚠️ 系統尚未設定金鑰，請至 Settings 中設定。"
 
     # ✅【產圖大腦攔截器】
-    draw_keywords = ["幫我畫", "畫一", "產圖", "生成圖片", "產生圖片", "畫出", "畫張"]
+    draw_keywords = ["幫我畫", "畫一", "產圖", "生成圖片", "產生圖片", "畫出", "畫張","畫", "圖", "產出", "生成", "生一張"]
     is_drawing = any(k in user_text for k in draw_keywords)
 
     if is_drawing:
