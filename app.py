@@ -101,7 +101,6 @@ def ask_smart_agent(user_text, uploaded_files, history, username):
             return f"❌ 繪圖失敗，可能是提示詞含有敏感內容或 API 限制：{str(e)}"
 
     # ----- 一般文字與檔案邏輯 -----
-    # ✅ 完美修復歷史紀錄格式配對
     cleaned_history = []
     for item in history[-3:]:
         if isinstance(item, (list, tuple)) and len(item) >= 2:
@@ -140,15 +139,15 @@ def ask_smart_agent(user_text, uploaded_files, history, username):
     
     if uploaded_files:
         for file_info in uploaded_files:
-            # ✅ 完美相容 Gradio 新版 (dict) 與舊版 (str) 的檔案格式提取
+            # 相容 Gradio 檔案格式
             actual_path = file_info["path"] if isinstance(file_info, dict) else file_info
             
             file_size_mb = os.path.getsize(actual_path) / (1024 * 1024)
             if file_size_mb > 10:
                 return f"⚠️ 警告：檔案 ({file_size_mb:.1f}MB) 超過 10MB 限制！"
             
-            # ✅ 精準提取副檔名，轉為安全檔名防報錯
-            safe_ext = os.path.[...](asc_slot://start-slot-7)splitext(actual_path)
+            # [...](asc_slot://start-slot-9)✅ 精準提取副檔名 (加上)，轉為安全檔名防報錯
+            safe_ext = os.path.[...](asc_slot://start-slot-11)splitext(actual_path)
             safe_name = f"temp_upload_{uuid.uuid4().hex}{safe_ext}"
             try:
                 shutil.copy(actual_path, safe_name)
@@ -223,7 +222,7 @@ def chat_logic(message_dict, history, request: gr.Request):
 demo = gr.ChatInterface(
     fn=chat_logic, 
     multimodal=True, 
-    title="🚀 可進化 AI 助理 V21 (零死角檔案處理版)",
+    title="🚀 可進化 AI 助理 V22 (產圖 + 檔案解鎖完美版)",
     description="具備多用戶隔離與 RAG 記憶的頂級架構。<br>👇 **請手動輸入，或點擊下方的【快捷指令按鈕】：**",
     examples=[
         [{"text": "自主學習"}],
