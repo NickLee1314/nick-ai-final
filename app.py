@@ -40,7 +40,7 @@ def update_user_profile(user_input, username):
     if not user_input or not supabase or not client: return
     try:
         prompt = f"分析這句話：「{user_input}」。是否透露了說話者的個人偏好、物品 or 習慣？有則總結事實，無則回覆『無』。"
-        resp = client.models.generate_content(model='gemini-1.5-pro-latest', contents=prompt)
+        resp = client.models.generate_content(model='gemini-3.6-flash', contents=prompt)
         fact = resp.text.strip()
         if fact != "無" and "沒有" not in fact and len(fact) > 2:
             supabase.table('user_profile').insert({"fact": fact, "username": username}).execute()
