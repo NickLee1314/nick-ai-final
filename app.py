@@ -60,7 +60,7 @@ def update_user_profile(user_input, username):
         if any(k in user_input.lower() for k in draw_keywords):
             return
         prompt = f"分析這句話：「{user_input}」。是否透露了說話者的個人偏好、物品 or 習慣？有則總結事實，無則回覆『無』。"
-        resp = client.models.generate_content(model='gemini-1.5-pro-latest', contents=prompt)
+        resp = client.models.generate_content(model='gemini-3.6-flash', contents=prompt)
         fact = resp.text.strip()
         if fact != "無" and "沒有" not in fact and len(fact) > 2:
             supabase.table('user_profile').insert({"fact": fact, "username": username}).execute()
@@ -94,7 +94,7 @@ def ask_smart_agent(user_text, uploaded_files, history, username):
     # --- V30 終極複合式訊息修復 ---
     def create_file_response(content, file_type):
         doc_prompt = f"請根據以下指示，撰寫一份完整、專業的文章或報告內容（不需打招呼，直接給出純內文即可）：\n{content}"
-        resp = client.models.generate_content(model='gemini-1.5-pro-latest', contents=doc_prompt)
+        resp = client.models.generate_content(model='gemini-3.6-flash', contents=doc_prompt)
         report_content = resp.text
 
         if file_type == 'pdf':
@@ -188,7 +188,7 @@ def ask_smart_agent(user_text, uploaded_files, history, username):
             finally:
                 if os.path.exists(safe_name): os.remove(safe_name)
     try:
-        response = client.models.generate_content(model='gemini-1.5-pro-latest', contents=contents_to_send)
+        response = client.models.generate_content(model='gemini-3.6-flash', contents=contents_to_send)
         final_answer = response.text
         db_question = user_text if user_text else "[分析了上傳的檔案]"
         supabase.table('memory').insert({"question": db_question, "answer": final_answer, "username": username}).execute()
