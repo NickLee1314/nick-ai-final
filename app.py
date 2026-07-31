@@ -81,9 +81,9 @@ def ask_smart_agent(user_text, uploaded_files, history, username):
 
     if is_drawing:
         try:
-            # ✅ 使用 2026 最新官方支援的 Imagen 4 模型
+            # ✅ 使用 2026 最新官方支援的 gemini-3.1-flash-image
             result = client.models.generate_images(
-                model='imagen-4.0-generate-001',
+                model='gemini-3.1-flash-image',
                 prompt=user_text,
                 config={"number_of_images": 1, "output_mime_type": "image/jpeg"}
             )
