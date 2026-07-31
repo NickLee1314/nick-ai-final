@@ -79,22 +79,32 @@ def ask_smart_agent(user_text, uploaded_files, history, username):
     draw_keywords = ["幫我畫", "畫一", "產圖", "生成圖片", "產生圖片", "畫出", "畫張","畫", "圖", "產出", "生成", "生一張"]
     is_drawing = any(k in user_text for k in draw_keywords)
 
-    if is_drawing:
+   if is_drawing:
         try:
-            # ✅ 使用 2026 最新官方支援的 gemini-3.1-flash-image
-            result = client.models.generate_images(
+            # ✅【V25 終極產圖修復】使用最新原生模型，且全面改用最新的 generate_content 方法
+            result = client.models.generate_content(
                 model='gemini-3.1-flash-image',
-                prompt=user_text,
-                config={"number_of_images": 1, "output_mime_type": "image/jpeg"}
+                contents=user_text,
             )
-            generated_image = result.generated_images[0]
             
-            # 將圖片轉為 base64 格式顯示
-            b64_img = base64.b64encode(generated_image.image.image_bytes).decode('utf-8')
-            md_image = f"![Generated Image](data:image/jpeg;base64,{b64_img})"
+            b64_img = None
+            mime_type = "image/jpeg"
+            
+            # 從新版的回傳格式中精準提取圖片編碼
+            if result.candidates and result.candidates[0].content.parts:
+                for part in result.candidates[0].content.parts:
+                    if part.inline_data:
+                        b64_img = base64.b64encode(part.inline_data.data).decode('utf-8')
+                        mime_type = part.inline_data.mime_type
+                        break
+            
+            if not b64_img:
+                return "❌ 繪圖失敗，可能是提示詞含有敏感內容，模型未回傳圖片。"
+                
+            # 將圖片轉為 base64 格式顯示在網頁上
+            md_image = f"![Generated Image](data:{mime_type};base64,{b64_img})"
             final_answer = f"🎨 **為您繪製完成：**\n\n{md_image}"
             
-            # 紀錄到資料庫
             supabase.table('memory').insert({"question": user_text, "answer": "🎨 [AI 生成了一張圖片]", "username": username}).execute()
             return final_answer
         except Exception as e:
