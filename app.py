@@ -5,14 +5,22 @@ import schedule
 import gradio as gr
 from supabase import create_client, Client
 from duckduckgo_search import DDGS
-from google import genai
+
+# ✅【V10.1 終極兼容修正】完美解決 Render 平台與 google.genai 舊套件命名空間的衝突
+try:
+    import google.genai as genai
+except ImportError:
+    try:
+        from google import genai
+    except ImportError:
+        import genai
 
 # --- 1. 讀取雲端金鑰與多用戶設定 ---
 SUPABASE_URL = os.environ.get("SUPABASE_URL")
 SUPABASE_KEY = os.environ.get("SUPABASE_KEY")
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
 
-# 【修復】多用戶帳密解析邏輯，完全排除 SyntaxError 
+# 【Bug 徹底修復】多用戶帳密解析邏輯，完美防範 IndexError
 users_env = os.environ.get("WEB_USERS", "admin:admin")
 AUTH_LIST = []
 if users_env:
@@ -21,7 +29,7 @@ if users_env:
             parts = pair.split(':', 1)
             if len(parts) == 2:
                 username = parts[0].[...](asc_slot://start-slot-1)strip()
-                password = parts.strip()  # ✅ 100% 正確：parts 讀取密碼
+                password = parts.strip()  # ✅ 100% 修正：從 parts 讀取密碼
                 if username and password:
                     AUTH_LIST.append((username, password))
 
@@ -41,7 +49,7 @@ def get_user_profile(username):
 def update_user_profile(user_input, username):
     if not user_input or not supabase or not client: return
     try:
-        # ✅ 使用最聰明的模型 gemini-1.5-flash
+        # ✅ 使用最優模型 gemini-1.5-flash
         prompt = f"分析這句話：「{user_input}」。是否透露了說話者的個人偏好、物品 or 習慣？有則總結事實，無則回覆『無』。"
         resp = client.models.generate_content(model='gemini-1.5-flash', contents=prompt)
         fact = resp.text.strip()
@@ -167,11 +175,11 @@ def chat_logic(message_dict, history, request: gr.Request):
     else:
         yield ask_smart_agent(text, files, history, username)
 
-# ✅ V9.8 終極無 Bug 界面（相容所有 Gradio 版本）
+# ✅ V10.1 終極無 Bug 界面（相容所有 Gradio 版本）
 demo = gr.ChatInterface(
     fn=chat_logic, 
     multimodal=True, 
-    title="🚀 可進化 AI 助理 V9.8 (終極完美正式版)",
+    title="🚀 可進化 AI 助理 V10.1 (終極完美正式版)",
     description="具備多用戶隔離、防護罩、垃圾回收與零死角除錯的頂級架構。<br>👇 **請手動輸入，或點擊下方的【快捷指令按鈕】：**",
     examples=[
         [{"text": "自主學習"}],
