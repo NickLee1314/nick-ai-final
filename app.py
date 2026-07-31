@@ -93,28 +93,37 @@ def ask_smart_agent(user_text, uploaded_files, history, username):
 
     user_lower = user_text.lower()
 
-    # ✅【產出 PDF 攔截器】
+    # ✅【產出 PDF 攔截器 (完美中文斷行版)】
     if "存成pdf" in user_lower or "產出pdf" in user_lower or "做成pdf" in user_lower:
         try:
-            # 1. 檢查是否有上傳中文字型
             font_path = "NotoSansTC-Regular.ttf"
             if not os.path.exists(font_path):
                 return "❌ 找不到中文字型檔 (NotoSansTC-Regular.ttf)！請確認您已將字型上傳至 GitHub。"
 
-            # 2. 呼叫 AI 寫內容
             doc_prompt = f"請根據以下指示，撰寫一份專業報告（不需打招呼，直接給出純內文即可）：\n{user_text}"
             resp = client.models.generate_content(model='gemini-3.6-flash', contents=doc_prompt)
             content = resp.text
 
-            # 3. 建立 PDF 並嵌入中文字型
             pdf = FPDF()
             pdf.add_page()
-            pdf.add_font("NotoSansTC", "", font_path, uni=True)
+            pdf.add_font("NotoSansTC", "", font_path)
             pdf.set_font("NotoSansTC", size=12)
             
-            # 將文字逐行寫入 PDF，避免超出邊界
+            # 🚀 終極修復：強制逐字測量與換行，徹底解決中文 PDF 不會斷行的崩潰問題
+            max_w = pdf.w - 2 * pdf.l_margin - 5
             for line in content.split('\n'):
-                pdf.multi_cell(0, 10, txt=line)
+                if not line.strip():
+                    pdf.cell(0, 10, txt="", ln=1)
+                    continue
+                current_line = ""
+                for char in line:
+                    if pdf.get_string_width(current_line + char) > max_w:
+                        pdf.cell(0, 10, txt=current_line, ln=1)
+                        current_line = char
+                    else:
+                        current_line += char
+                if current_line:
+                    pdf.cell(0, 10, txt=current_line, ln=1)
             
             filename = f"AI_Report_{uuid.uuid4().hex[:6]}.pdf"
             pdf.output(filename)
@@ -240,19 +249,18 @@ def chat_logic(message_dict, history, request: gr.Request):
         supabase.table('research_targets').insert({"target": target, "username": username}).execute()
         yield f"🎯 [{username}] 的目標已設定：『{target}』"
     else:
-        # ✅ 支援回傳實體檔案的特殊邏輯
         reply = ask_smart_agent(text, files, history, username)
-        if isinstance(reply, tuple):  # 偵測到是檔案
+        if isinstance(reply, tuple):
             yield "📝 報告內容已撰寫完成，正在為您打包成檔案..."
             time.sleep(0.5)
-            yield reply # 直接丟出檔案讓網頁顯示下載氣泡
+            yield reply
         else:
             yield reply
 
 demo = gr.ChatInterface(
     fn=chat_logic,
     multimodal=True,
-    title="🚀 可進化 AI 助理 V28 (PDF/DOCX 雙輸出完全體)",
+    title="🚀 可進化 AI 助理 V29 (PDF不亂碼雙輸出版)",
     description="具備多用戶隔離與 RAG 記憶的頂級架構。<br>👇 **請手動輸入，或點擊下方的【快捷指令按鈕】：**",
     examples=[
         [{"text": "幫我規劃三天兩夜的高雄旅遊行程，並存成PDF"}],
@@ -262,7 +270,7 @@ demo = gr.ChatInterface(
     ]
 )
 
-# ⚠️ 自動背景任務暫時關閉，避免吃光免費用戶的每日額度
+# ⚠️ 自動背景任務暫時關閉
 # def daily_background_learning(): ...
 # def run_scheduler(): ...
 # threading.Thread(target=run_scheduler, daemon=True).start()
