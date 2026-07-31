@@ -6,17 +6,11 @@ import gradio as gr
 from supabase import create_client, Client
 from duckduckgo_search import DDGS
 
-# 載入 Google GenAI 並進行環境兼容
+# 安全載入 Google GenAI
 try:
     import google.genai as genai
-    from google.genai.types import HttpOptions  # ✅ 導入最新連線設定
 except ImportError:
-    try:
-        from google import genai
-        from google.genai.types import HttpOptions
-    except ImportError:
-        import genai
-        from google.genai.types import HttpOptions
+    import genai
 
 # --- 1. 讀取雲端金鑰與多用戶設定 ---
 SUPABASE_URL = os.environ.get("SUPABASE_URL")
@@ -32,19 +26,15 @@ if users_env:
             parts = pair.split(':', 1)
             if len(parts) == 2:
                 username = parts[0].strip()
-                password = parts[1].strip()  # ✅ 確保密碼讀取正確
+                password = parts[1].strip()
                 if username and password:
                     AUTH_LIST.append((username, password))
 
 supabase = create_client(SUPABASE_URL, SUPABASE_KEY) if SUPABASE_URL and SUPABASE_KEY else None
 
-# ✅【終極修復關鍵】強制命令 Client 走最新的 "v1" 穩定通道，徹底擺脫 v1beta 404 限制！
 client = None
 if GEMINI_API_KEY:
-    client = genai.Client(
-        api_key=GEMINI_API_KEY,
-        http_options=HttpOptions(api_version="v1")  # 🚀 強制指定 v1 通道，阻斷 404 錯誤
-    )
+    client = genai.Client(api_key=GEMINI_API_KEY)
 
 # --- 2. 雲端資料庫操作 ---
 def get_user_profile(username):
@@ -59,8 +49,8 @@ def update_user_profile(user_input, username):
     if not user_input or not supabase or not client: return
     try:
         prompt = f"分析這句話：「{user_input}」。是否透露了說話者的個人偏好、物品 or 習慣？有則總結事實，無則回覆『無』。"
-        # ✅ 使用最新一代、且在 v1 通道百分之百支援的穩定模型
-        resp = client.models.generate_content(model='gemini-1.5-pro', contents=prompt)
+        # ✅ 使用 2026 年最新 GA 穩定版模型 gemini-3.6-flash
+        resp = client.models.generate_content(model='gemini-3.6-flash', contents=prompt)
         fact = resp.text.strip()
         if fact != "無" and "沒有" not in fact and len(fact) > 2:
             supabase.table('user_profile').insert({"fact": fact, "username": username}).execute()
@@ -125,8 +115,8 @@ def ask_smart_agent(user_text, uploaded_files, history, username):
                 return f"❌ 檔案上傳失敗: {e}"
 
     try:
-        # ✅ 使用最新一代、且在 v1 通道百分之百支援的穩定模型
-        response = client.models.generate_content(model='gemini-1.5-pro', contents=contents_to_send)
+        # ✅ 使用 2026 年最新 GA 穩定版模型 gemini-3.6-flash
+        response = client.models.generate_content(model='gemini-3.6-flash', contents=contents_to_send)
         final_answer = response.text
         
         db_question = user_text if user_text else "[分析了上傳的檔案]"
@@ -187,7 +177,7 @@ def chat_logic(message_dict, history, request: gr.Request):
 demo = gr.ChatInterface(
     fn=chat_logic, 
     multimodal=True, 
-    title="🚀 可進化 AI 助理 V15 (強制通道修正版)",
+    title="🚀 可進化 AI 助理 V16 (2026最新大腦版)",
     description="具備多用戶隔離與 RAG 記憶的頂級架構。<br>👇 **請手動輸入，或點擊下方的【快捷指令按鈕】：**",
     examples=[
         [{"text": "自主學習"}],
