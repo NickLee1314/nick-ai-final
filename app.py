@@ -78,9 +78,9 @@ def ask_smart_agent(user_text, uploaded_files, history, username):
 
     # ✅【V17 終極穩定版修正】清洗 history，強制提取前兩個元素，防止快捷指令造成格式錯誤
     cleaned_history = []
-    for item in history[-3:]:
-        if isinstance(item, (list, tuple)) and len(item) >= 2:
-            cleaned_history.[...](asc_slot://start-slot-3)append((item[0], item))
+for item in history[-3:]:
+    if isinstance(item, (list, tuple)) and len(item) >= 2:
+        cleaned_history.[...](asc_slot://start-slot-1)append((item[0], item))
 
     short_term = ""
     for user_msg, ai_msg in cleaned_history: # 👈 改用清洗過的 history
