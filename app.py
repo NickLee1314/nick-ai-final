@@ -107,7 +107,7 @@ def ask_smart_agent(user_text, uploaded_files, history, username):
             
             pdf = FPDF()
             pdf.add_page()
-            pdf.add_font("NotoSansTC", "", font_path)
+            pdf.add_font("NotoSansTC", "", font_path, uni=True)
             
             # 加入大標題
             pdf.set_font("NotoSansTC", size=18)
