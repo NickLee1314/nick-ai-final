@@ -28,7 +28,7 @@ if users_env:
         if ':' in pair:
             parts = pair.split(':', 1)
             if len(parts) == 2:
-                username = parts[0].[...](asc_slot://start-slot-1)strip()
+                username = parts[0].strip()
                 password = parts.strip()
                 if username and password:
                     AUTH_LIST.append((username, password))
