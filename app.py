@@ -147,7 +147,7 @@ def ask_smart_agent(user_text, uploaded_files, history, username):
                 return f"⚠️ 警告：檔案 ({file_size_mb:.1f}MB) 超過 10MB 限制！"
             
             # [...](asc_slot://start-slot-9)✅ 精準提取副檔名 (加上)，轉為安全檔名防報錯
-            safe_ext = os.path.splitext(actual_path)
+            safe_ext = os.path.[...](asc_slot://start-slot-7)splitext(actual_path)
             safe_name = f"temp_upload_{uuid.uuid4().hex}{safe_ext}"
             try:
                 shutil.copy(actual_path, safe_name)
