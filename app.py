@@ -59,8 +59,8 @@ def update_user_profile(user_input, username):
     if not user_input or not supabase or not client: return
     try:
         prompt = f"分析這句話：「{user_input}」。是否透露了說話者的個人偏好、物品 or 習慣？有則總結事實，無則回覆『無』。"
-        # ✅ 使用最新一代、性價比最高且保證支援的 gemini-2.5-flash 
-        resp = client.models.generate_content(model='gemini-2.5-flash', contents=prompt)
+        # ✅ 使用最新一代、性價比最高且保證支援的 gemini-1.5-pro-latest 
+        resp = client.models.generate_content(model='gemini-1.5-pro-latest', contents=prompt)
         fact = resp.text.strip()
         if fact != "無" and "沒有" not in fact and len(fact) > 2:
             supabase.table('user_profile').insert({"fact": fact, "username": username}).execute()
