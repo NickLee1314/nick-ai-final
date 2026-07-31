@@ -1,0 +1,5 @@
+google-genai
+duckduckgo-search
+supabase
+gradio
+schedule
