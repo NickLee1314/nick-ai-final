@@ -5,19 +5,13 @@ import schedule
 import gradio as gr
 from supabase import create_client, Client
 from duckduckgo_search import DDGS
-
-# 安全載入 Google GenAI
-try:
-    import google.genai as genai
-except ImportError:
-    import genai
+import google.genai as genai
 
 # --- 1. 讀取雲端金鑰與多用戶設定 ---
 SUPABASE_URL = os.environ.get("SUPABASE_URL")
 SUPABASE_KEY = os.environ.get("SUPABASE_KEY")
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
 
-# 解析多用戶
 users_env = os.environ.get("WEB_USERS", "admin:admin")
 AUTH_LIST = []
 if users_env:
@@ -30,11 +24,8 @@ if users_env:
                 if username and password:
                     AUTH_LIST.append((username, password))
 
-supabase = create_client(SUPABASE_URL, SUPABASE_KEY) if SUPABASE_URL and SUPABASE_KEY else None
-
-client = None
-if GEMINI_API_KEY:
-    client = genai.Client(api_key=GEMINI_API_KEY)
+supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY) if SUPABASE_URL and SUPABASE_KEY else None
+client = genai.Client(api_key=GEMINI_API_KEY) if GEMINI_API_KEY else None
 
 # --- 2. 雲端資料庫操作 ---
 def get_user_profile(username):
@@ -49,12 +40,11 @@ def update_user_profile(user_input, username):
     if not user_input or not supabase or not client: return
     try:
         prompt = f"分析這句話：「{user_input}」。是否透露了說話者的個人偏好、物品 or 習慣？有則總結事實，無則回覆『無』。"
-        # 使用 2026 年最新 GA 穩定版模型
-        resp = client.models.generate_content(model='gemini-3.6-flash', contents=prompt)
+        resp = client.models.generate_content(model='gemini-1.5-pro-latest', contents=prompt)
         fact = resp.text.strip()
         if fact != "無" and "沒有" not in fact and len(fact) > 2:
             supabase.table('user_profile').insert({"fact": fact, "username": username}).execute()
-    except: pass 
+    except: pass
 
 def recall_long_term_memory(username):
     if not supabase: return []
@@ -74,16 +64,15 @@ def search_the_web(query):
 # --- 3. 核心大腦邏輯 ---
 def ask_smart_agent(user_text, uploaded_files, history, username):
     if not client or not supabase:
-        return "⚠️ 系統尚未設定金鑰，請至 Settings 中設定。"
+        return "⚠️ 系統尚未設定完整的 API 金鑰 (GEMINI 或 SUPABASE)，請至 Settings 中設定。"
 
-    # ✅【V17 終極穩定版修正】清洗 history，強制提取前兩個元素，防止快捷指令造成格式錯誤
     cleaned_history = []
-for item in history[-3:]:
-    if isinstance(item, (list, tuple)) and len(item) >= 2:
-        cleaned_history.append((item[0], item))
+    for item in history[-3:]:
+        if isinstance(item, (list, tuple)) and len(item) >= 2:
+            cleaned_history.append((item[0], item[1]))
 
     short_term = ""
-    for user_msg, ai_msg in cleaned_history: # 👈 改用清洗過的 history
+    for user_msg, ai_msg in cleaned_history:
         if isinstance(user_msg, (list, tuple)):
             u_text = "[上傳了檔案]"
         elif isinstance(user_msg, dict):
@@ -91,22 +80,20 @@ for item in history[-3:]:
         else:
             u_text = str(user_msg)
         short_term += f"我:{u_text}\n你:{ai_msg}\n"
-        
+
     profile = get_user_profile(username)
     long_term_mems = recall_long_term_memory(username)
     long_term_context = "".join([f"舊紀錄:{m['question']} -> {m['answer'][:100]}...\n" for m in long_term_mems])
     web_context = search_the_web(user_text)
-    
     prompt = f"""你是一個多模態專屬 AI 助理。當前服務的主人是：{username}。
 【主人長期特徵】\n{profile}
 【本次對話上下文】\n{short_term if short_term else "新對話。"}
-【歷史記憶】\n{long_term_context if long_term_context else "無。"}
+【歷史記憶(請自動判斷關聯性)】\n{long_term_context if long_term_context else "無。"}
 【網路最新資訊】\n{web_context}
 【目前提問/指示】\n{user_text}
 請給出精準回答："""
-    
     contents_to_send = [prompt]
-    uploaded_g_files = [] 
+    uploaded_g_files = []
     
     if uploaded_files:
         for filepath in uploaded_files:
@@ -116,28 +103,25 @@ for item in history[-3:]:
             try:
                 g_file = client.files.upload(file=filepath)
                 contents_to_send.append(g_file)
-                uploaded_g_files.append(g_file) 
+                uploaded_g_files.append(g_file)
             except Exception as e:
                 return f"❌ 檔案上傳失敗: {e}"
-
+    
     try:
-        response = client.models.generate_content(model='gemini-3.6-flash', contents=contents_to_send)
+        response = client.models.generate_content(model='gemini-1.5-pro-latest', contents=contents_to_send)
         final_answer = response.text
-        
         db_question = user_text if user_text else "[分析了上傳的檔案]"
         supabase.table('memory').insert({"question": db_question, "answer": final_answer, "username": username}).execute()
         update_user_profile(user_text, username)
-        
         return final_answer
-        
     except Exception as e:
         return f"⚠️ AI 大腦暫時無法思考 (可能為安全攔截、金鑰無效或 API 限制)：{str(e)}"
-        
     finally:
         for gf in uploaded_g_files:
             try:
                 client.files.delete(name=gf.name)
-            except: pass
+            except:
+                pass
 
 # --- 4. 建立 Gradio 多模態網頁 ---
 def chat_logic(message_dict, history, request: gr.Request):
@@ -145,44 +129,35 @@ def chat_logic(message_dict, history, request: gr.Request):
     raw_text = message_dict.get("text", "")
     text = raw_text.strip()
     files = message_dict.get("files", [])
-    
     normalized_text = text.replace(" ", "").replace("　", "").replace("。", "").replace(".", "").replace("！", "").replace("!", "")
-
     if not text and files:
         text = "請幫我分析我上傳的檔案/錄音檔。"
-
     yield "⏳ 系統正在處理中，請稍候..."
-    
     if not supabase:
         yield "⚠️ 錯誤：無法連線至 Supabase 資料庫，請檢查金鑰設定。"
         return
-
     if normalized_text == "清除所有對話紀錄":
         supabase.table('memory').delete().eq('username', username).execute()
         yield f"🧹 [{username}] 的所有歷史對話記憶已被永久刪除！"
-        
     elif normalized_text == "清除我的個人畫像":
         supabase.table('user_profile').delete().eq('username', username).execute()
         yield f"🧹 [{username}] 的長期個人偏好筆記已被徹底清空！"
-        
     elif normalized_text.startswith("設定目標：") or normalized_text.startswith("設定目標:"):
         target = raw_text.split("：")[-1].split(":")[-1].strip()
         supabase.table('research_targets').insert({"target": target, "username": username}).execute()
         yield f"🎯 [{username}] 的目標已設定：『{target}』"
-        
     elif normalized_text == "自主學習":
         res = supabase.table('research_targets').select('target').eq('username', username).order('id', desc=True).limit(1).execute()
         target_str = res.data[0]['target'] if res.data else "2026年AI最新突破"
         yield f"🚀 正在為 [{username}] 針對『{target_str}』進行深度學習..."
         yield ask_smart_agent(f"針對『{target_str}』搜尋最新趨勢並整理報告。", [], history, username)
-        
     else:
         yield ask_smart_agent(text, files, history, username)
 
 demo = gr.ChatInterface(
-    fn=chat_logic, 
-    multimodal=True, 
-    title="🚀 可進化 AI 助理 V17 (終極穩定版)",
+    fn=chat_logic,
+    multimodal=True,
+    title="🚀 可進化 AI 助理 V18 (終極穩定版)",
     description="具備多用戶隔離與 RAG 記憶的頂級架構。<br>👇 **請手動輸入，或點擊下方的【快捷指令按鈕】：**",
     examples=[
         [{"text": "自主學習"}],
@@ -216,9 +191,11 @@ def run_scheduler():
 
 threading.Thread(target=run_scheduler, daemon=True).start()
 
+# --- 6. 啟動網頁 (Render 專用設定) ---
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 7860))
     if AUTH_LIST:
         demo.launch(server_name="0.0.0.0", server_port=port, auth=AUTH_LIST)
     else:
         demo.launch(server_name="0.0.0.0", server_port=port)
+
