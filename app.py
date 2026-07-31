@@ -94,13 +94,14 @@ def ask_smart_agent(user_text, uploaded_files, history, username):
             md_image = f"![Generated Image](data:image/jpeg;base64,{b64_img})"
             final_answer = f"🎨 **為您繪製完成：**\n\n{md_image}"
             
-            # 紀錄到資料庫，但不存入超長的 base64 以免塞爆空間
+            # 紀錄到資料庫
             supabase.table('memory').insert({"question": user_text, "answer": "🎨 [AI 生成了一張圖片]", "username": username}).execute()
             return final_answer
         except Exception as e:
             return f"❌ 繪圖失敗，可能是提示詞含有敏感內容或 API 限制：{str(e)}"
 
     # ----- 一般文字與檔案邏輯 -----
+    # ✅ 完美修復歷史紀錄格式配對
     cleaned_history = []
     for item in history[-3:]:
         if isinstance(item, (list, tuple)) and len(item) >= 2:
@@ -115,7 +116,6 @@ def ask_smart_agent(user_text, uploaded_files, history, username):
         else:
             u_text = str(user_msg)
             
-        # 防止上一輪生成的圖片編碼塞爆這次的記憶體
         safe_ai_msg = str(ai_msg)
         if "data:image" in safe_ai_msg:
             safe_ai_msg = "🎨 [AI 生成了一張圖片]"
@@ -139,16 +139,19 @@ def ask_smart_agent(user_text, uploaded_files, history, username):
     uploaded_g_files = [] 
     
     if uploaded_files:
-        for filepath in uploaded_files:
-            file_size_mb = os.path.getsize(filepath) / (1024 * 1024)
+        for file_info in uploaded_files:
+            # ✅ 完美相容 Gradio 新版 (dict) 與舊版 (str) 的檔案格式提取
+            actual_path = file_info["path"] if isinstance(file_info, dict) else file_info
+            
+            file_size_mb = os.path.getsize(actual_path) / (1024 * 1024)
             if file_size_mb > 10:
                 return f"⚠️ 警告：檔案 ({file_size_mb:.1f}MB) 超過 10MB 限制！"
             
-            # ✅ 解決中文檔名報錯：在背景轉為安全的隨機英文檔名
-            safe_ext = os.path.[...](asc_slot://start-slot-5)splitext(filepath)
+            # ✅ 精準提取副檔名，轉為安全檔名防報錯
+            safe_ext = os.path.[...](asc_slot://start-slot-7)splitext(actual_path)
             safe_name = f"temp_upload_{uuid.uuid4().hex}{safe_ext}"
             try:
-                shutil.copy(filepath, safe_name)
+                shutil.copy(actual_path, safe_name)
                 g_file = client.files.upload(file=safe_name)
                 contents_to_send.append(g_file)
                 uploaded_g_files.append(g_file) 
@@ -220,7 +223,7 @@ def chat_logic(message_dict, history, request: gr.Request):
 demo = gr.ChatInterface(
     fn=chat_logic, 
     multimodal=True, 
-    title="🚀 可進化 AI 助理 V20 (產圖 + 檔案解鎖版)",
+    title="🚀 可進化 AI 助理 V21 (零死角檔案處理版)",
     description="具備多用戶隔離與 RAG 記憶的頂級架構。<br>👇 **請手動輸入，或點擊下方的【快捷指令按鈕】：**",
     examples=[
         [{"text": "自主學習"}],
