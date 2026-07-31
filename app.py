@@ -49,7 +49,7 @@ def update_user_profile(user_input, username):
     if not user_input or not supabase or not client: return
     try:
         prompt = f"分析這句話：「{user_input}」。是否透露了說話者的個人偏好、物品 or 習慣？有則總結事實，無則回覆『無』。"
-        # ✅ 使用 2026 年最新 GA 穩定版模型 gemini-3.6-flash
+        # 使用 2026 年最新 GA 穩定版模型
         resp = client.models.generate_content(model='gemini-3.6-flash', contents=prompt)
         fact = resp.text.strip()
         if fact != "無" and "沒有" not in fact and len(fact) > 2:
@@ -76,9 +76,15 @@ def ask_smart_agent(user_text, uploaded_files, history, username):
     if not client or not supabase:
         return "⚠️ 系統尚未設定金鑰，請至 Settings 中設定。"
 
+    # ✅【V17 終極穩定版修正】清洗 history，強制提取前兩個元素，防止快捷指令造成格式錯誤
+    cleaned_history = []
+    for item in history[-3:]:
+        if isinstance(item, (list, tuple)) and len(item) >= 2:
+            cleaned_history.[...](asc_slot://start-slot-3)append((item[0], item))
+
     short_term = ""
-    for user_msg, ai_msg in history[-3:]:
-        if isinstance(user_msg, tuple):
+    for user_msg, ai_msg in cleaned_history: # 👈 改用清洗過的 history
+        if isinstance(user_msg, (list, tuple)):
             u_text = "[上傳了檔案]"
         elif isinstance(user_msg, dict):
             u_text = user_msg.get("text", "[上傳了檔案]")
@@ -115,7 +121,6 @@ def ask_smart_agent(user_text, uploaded_files, history, username):
                 return f"❌ 檔案上傳失敗: {e}"
 
     try:
-        # ✅ 使用 2026 年最新 GA 穩定版模型 gemini-3.6-flash
         response = client.models.generate_content(model='gemini-3.6-flash', contents=contents_to_send)
         final_answer = response.text
         
@@ -177,7 +182,7 @@ def chat_logic(message_dict, history, request: gr.Request):
 demo = gr.ChatInterface(
     fn=chat_logic, 
     multimodal=True, 
-    title="🚀 可進化 AI 助理 V16 (2026最新大腦版)",
+    title="🚀 可進化 AI 助理 V17 (終極穩定版)",
     description="具備多用戶隔離與 RAG 記憶的頂級架構。<br>👇 **請手動輸入，或點擊下方的【快捷指令按鈕】：**",
     examples=[
         [{"text": "自主學習"}],
