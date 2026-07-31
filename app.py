@@ -49,7 +49,8 @@ def update_user_profile(user_input, username):
     if not user_input or not supabase or not client: return
     try:
         prompt = f"分析這句話：「{user_input}」。是否透露了說話者的個人偏好、物品 or 習慣？有則總結事實，無則回覆『無』。"
-        resp = client.models.generate_content(model='gemini-1.5-flash', contents=prompt)
+        # ✅ 已經幫您改為通用模型 gemini-pro
+        resp = client.models.generate_content(model='gemini-pro', contents=prompt)
         fact = resp.text.strip()
         if fact != "無" and "沒有" not in fact and len(fact) > 2:
             supabase.table('user_profile').insert({"fact": fact, "username": username}).execute()
@@ -114,7 +115,8 @@ def ask_smart_agent(user_text, uploaded_files, history, username):
                 return f"❌ 檔案上傳失敗: {e}"
 
     try:
-        response = client.models.generate_content(model='gemini-1.5-flash', contents=contents_to_send)
+        # ✅ 已經幫您改為通用模型 gemini-pro
+        response = client.models.generate_content(model='gemini-pro', contents=contents_to_send)
         final_answer = response.text
         
         db_question = user_text if user_text else "[分析了上傳的檔案]"
@@ -175,7 +177,7 @@ def chat_logic(message_dict, history, request: gr.Request):
 demo = gr.ChatInterface(
     fn=chat_logic, 
     multimodal=True, 
-    title="🚀 可進化 AI 助理 V11 (終極無 Bug 版)",
+    title="🚀 可進化 AI 助理 V12 (終極通用版)",
     description="具備多用戶隔離與 RAG 記憶的頂級架構。<br>👇 **請手動輸入，或點擊下方的【快捷指令按鈕】：**",
     examples=[
         [{"text": "自主學習"}],
