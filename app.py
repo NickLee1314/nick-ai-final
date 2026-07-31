@@ -9,18 +9,27 @@ import gradio as gr
 from supabase import create_client, Client
 from duckduckgo_search import DDGS
 
-# 安全載入 Google GenAI
+# 載入 Google GenAI 與 文書處理套件
 try:
     import google.genai as genai
 except ImportError:
     import genai
+
+try:
+    import docx
+except ImportError:
+    pass
+
+try:
+    from fpdf import FPDF
+except ImportError:
+    pass
 
 # --- 1. 讀取雲端金鑰與多用戶設定 ---
 SUPABASE_URL = os.environ.get("SUPABASE_URL")
 SUPABASE_KEY = os.environ.get("SUPABASE_KEY")
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
 
-# 解析多用戶
 users_env = os.environ.get("WEB_USERS", "admin:admin")
 AUTH_LIST = []
 if users_env:
@@ -33,7 +42,7 @@ if users_env:
                 if username and password:
                     AUTH_LIST.append((username, password))
 
-supabase = create_client(SUPABASE_URL, SUPABASE_KEY) if SUPABASE_URL and SUPABASE_KEY else None
+supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY) if SUPABASE_URL and SUPABASE_KEY else None
 client = genai.Client(api_key=GEMINI_API_KEY) if GEMINI_API_KEY else None
 
 # --- 2. 雲端資料庫操作 ---
@@ -48,12 +57,16 @@ def get_user_profile(username):
 def update_user_profile(user_input, username):
     if not user_input or not supabase or not client: return
     try:
+        draw_keywords = ["畫", "圖", "產出", "生成", "生一張", "存成", "輸出", "文件", "word", "doc", "pdf"]
+        if any(k in user_input.lower() for k in draw_keywords):
+            return
+
         prompt = f"分析這句話：「{user_input}」。是否透露了說話者的個人偏好、物品 or 習慣？有則總結事實，無則回覆『無』。"
         resp = client.models.generate_content(model='gemini-3.6-flash', contents=prompt)
         fact = resp.text.strip()
         if fact != "無" and "沒有" not in fact and len(fact) > 2:
             supabase.table('user_profile').insert({"fact": fact, "username": username}).execute()
-    except: pass 
+    except: pass
 
 def recall_long_term_memory(username):
     if not supabase: return []
@@ -63,6 +76,9 @@ def recall_long_term_memory(username):
     except: return []
 
 def search_the_web(query):
+    draw_keywords = ["畫", "圖", "產出", "生成", "生一張", "存成", "文件", "word", "doc", "pdf"]
+    if any(k in query.lower() for k in draw_keywords):
+        return "特殊功能模式，不進行網路搜尋。"
     if not query: return "無文字查詢"
     try:
         results = DDGS().text(query, max_results=3)
@@ -73,61 +89,76 @@ def search_the_web(query):
 # --- 3. 核心大腦邏輯 ---
 def ask_smart_agent(user_text, uploaded_files, history, username):
     if not client or not supabase:
-        return "⚠️ 系統尚未設定金鑰，請至 Settings 中設定。"
+        return "⚠️ 系統尚未設定完整的 API 金鑰 (GEMINI 或 SUPABASE)，請至 Settings 中設定。"
 
-    # ✅【產圖大腦攔截器】
-    draw_keywords = ["幫我畫", "畫一", "產圖", "生成圖片", "產生圖片", "畫出", "畫張","畫", "圖", "產出", "生成", "生一張"]
-    is_drawing = any(k in user_text for k in draw_keywords)
+    user_lower = user_text.lower()
 
-    if is_drawing:
+    # ✅【產出 PDF 攔截器】
+    if "存成pdf" in user_lower or "產出pdf" in user_lower or "做成pdf" in user_lower:
         try:
-            # ✅【V25 終極產圖修復】使用最新原生模型，且全面改用最新的 generate_content 方法
-            result = client.models.generate_content(
-                model='gemini-3.1-flash-image',
-                contents=user_text,
-            )
+            # 1. 檢查是否有上傳中文字型
+            font_path = "NotoSansTC-Regular.ttf"
+            if not os.path.exists(font_path):
+                return "❌ 找不到中文字型檔 (NotoSansTC-Regular.ttf)！請確認您已將字型上傳至 GitHub。"
+
+            # 2. 呼叫 AI 寫內容
+            doc_prompt = f"請根據以下指示，撰寫一份專業報告（不需打招呼，直接給出純內文即可）：\n{user_text}"
+            resp = client.models.generate_content(model='gemini-3.6-flash', contents=doc_prompt)
+            content = resp.text
+
+            # 3. 建立 PDF 並嵌入中文字型
+            pdf = FPDF()
+            pdf.add_page()
+            pdf.add_font("NotoSansTC", "", font_path, uni=True)
+            pdf.set_font("NotoSansTC", size=12)
             
-            b64_img = None
-            mime_type = "image/jpeg"
+            # 將文字逐行寫入 PDF，避免超出邊界
+            for line in content.split('\n'):
+                pdf.multi_cell(0, 10, txt=line)
             
-            # 從新版的回傳格式中精準提取圖片編碼
-            if result.candidates and result.candidates[0].content.parts:
-                for part in result.candidates[0].content.parts:
-                    if part.inline_data:
-                        b64_img = base64.b64encode(part.inline_data.data).decode('utf-8')
-                        mime_type = part.inline_data.mime_type
-                        break
-            
-            if not b64_img:
-                return "❌ 繪圖失敗，可能是提示詞含有敏感內容，模型未回傳圖片。"
-                
-            # 將圖片轉為 base64 格式顯示在網頁上
-            md_image = f"![Generated Image](data:{mime_type};base64,{b64_img})"
-            final_answer = f"🎨 **為您繪製完成：**\n\n{md_image}"
-            
-            supabase.table('memory').insert({"question": user_text, "answer": "🎨 [AI 生成了一張圖片]", "username": username}).execute()
-            return final_answer
+            filename = f"AI_Report_{uuid.uuid4().hex[:6]}.pdf"
+            pdf.output(filename)
+
+            supabase.table('memory').insert({"question": user_text, "answer": "📝 [AI 生成並提供了一份 PDF 檔案]", "username": username}).execute()
+            return (filename,)
         except Exception as e:
-            return f"❌ 繪圖失敗，可能是提示詞含有敏感內容或 API 限制：{str(e)}"
+            return f"❌ 產生 PDF 失敗：{str(e)}"
+
+    # ✅【產出 DOCX 攔截器】
+    doc_keywords = ["存成doc", "存成word", "產出文件", "輸出報告", "存成檔案", "做成word", "產出doc"]
+    if any(k in user_lower for k in doc_keywords):
+        try:
+            doc_prompt = f"請根據以下指示，撰寫一份專業報告（不需打招呼，直接給出純內文即可）：\n{user_text}"
+            resp = client.models.generate_content(model='gemini-3.6-flash', contents=doc_prompt)
+            content = resp.text
+
+            doc = docx.Document()
+            doc.add_heading('AI 智能分析報告', 0)
+            doc.add_paragraph(content)
+            
+            filename = f"AI_Report_{uuid.uuid4().hex[:6]}.docx"
+            doc.save(filename)
+
+            supabase.table('memory').insert({"question": user_text, "answer": "📝 [AI 生成並提供了一份 Word 檔案]", "username": username}).execute()
+            return (filename,)
+        except Exception as e:
+            return f"❌ 產生 DOCX 失敗：{str(e)}"
 
     # ----- 一般文字與檔案邏輯 -----
     cleaned_history = []
     for item in history[-3:]:
         if isinstance(item, (list, tuple)) and len(item) >= 2:
-            cleaned_history.append((item[0], item[1]))
+            cleaned_history.append((item[0], item))
 
     short_term = ""
-    for user_msg, ai_msg in cleaned_history: 
-        if isinstance(user_msg, (list, tuple)):
-            u_text = "[上傳了檔案]"
-        elif isinstance(user_msg, dict):
-            u_text = user_msg.get("text", "[上傳了檔案]")
-        else:
-            u_text = str(user_msg)
-            
+    for user_msg, ai_msg in cleaned_history:
+        if isinstance(user_msg, (list, tuple)): u_text = "[上傳了檔案]"
+        elif isinstance(user_msg, dict): u_text = user_msg.get("text", "[上傳了檔案]")
+        else: u_text = str(user_msg)
+        
         safe_ai_msg = str(ai_msg)
-        if "data:image" in safe_ai_msg:
-            safe_ai_msg = "🎨 [AI 生成了一張圖片]"
+        if "data:image" in safe_ai_msg: safe_ai_msg = "🎨 [AI 生成了一張圖片]"
+        elif ".doc" in safe_ai_msg or ".pdf" in safe_ai_msg: safe_ai_msg = "📝 [AI 提供了一份檔案]"
             
         short_term += f"我:{u_text}\n你:{safe_ai_msg}\n"
         
@@ -139,7 +170,7 @@ def ask_smart_agent(user_text, uploaded_files, history, username):
     prompt = f"""你是一個多模態專屬 AI 助理。當前服務的主人是：{username}。
 【主人長期特徵】\n{profile}
 【本次對話上下文】\n{short_term if short_term else "新對話。"}
-【歷史記憶】\n{long_term_context if long_term_context else "無。"}
+【歷史記憶(請自動判斷關聯性)】\n{long_term_context if long_term_context else "無。"}
 【網路最新資訊】\n{web_context}
 【目前提問/指示】\n{user_text}
 請給出精準回答："""
@@ -149,14 +180,11 @@ def ask_smart_agent(user_text, uploaded_files, history, username):
     
     if uploaded_files:
         for file_info in uploaded_files:
-            # 相容 Gradio 檔案格式
             actual_path = file_info["path"] if isinstance(file_info, dict) else file_info
-            
             file_size_mb = os.path.getsize(actual_path) / (1024 * 1024)
             if file_size_mb > 10:
                 return f"⚠️ 警告：檔案 ({file_size_mb:.1f}MB) 超過 10MB 限制！"
             
-            # [...](asc_slot://start-slot-9)✅ 精準提取副檔名 (加上)，轉為安全檔名防報錯
             _, safe_ext = os.path.splitext(actual_path)
             safe_name = f"temp_upload_{uuid.uuid4().hex}{safe_ext}"
             try:
@@ -179,14 +207,11 @@ def ask_smart_agent(user_text, uploaded_files, history, username):
         update_user_profile(user_text, username)
         
         return final_answer
-        
     except Exception as e:
         return f"⚠️ AI 大腦暫時無法思考 (可能為安全攔截、金鑰無效或 API 限制)：{str(e)}"
-        
     finally:
         for gf in uploaded_g_files:
-            try:
-                client.files.delete(name=gf.name)
+            try: client.files.delete(name=gf.name)
             except: pass
 
 # --- 4. 建立 Gradio 多模態網頁 ---
@@ -197,74 +222,50 @@ def chat_logic(message_dict, history, request: gr.Request):
     files = message_dict.get("files", [])
     
     normalized_text = text.replace(" ", "").replace("　", "").replace("。", "").replace(".", "").replace("！", "").replace("!", "")
-
-    if not text and files:
-        text = "請幫我分析我上傳的檔案/錄音檔。"
-
+    if not text and files: text = "請幫我分析我上傳的檔案/錄音檔。"
     yield "⏳ 系統正在處理中，請稍候..."
     
     if not supabase:
         yield "⚠️ 錯誤：無法連線至 Supabase 資料庫，請檢查金鑰設定。"
         return
-
+        
     if normalized_text == "清除所有對話紀錄":
         supabase.table('memory').delete().eq('username', username).execute()
         yield f"🧹 [{username}] 的所有歷史對話記憶已被永久刪除！"
-        
     elif normalized_text == "清除我的個人畫像":
         supabase.table('user_profile').delete().eq('username', username).execute()
         yield f"🧹 [{username}] 的長期個人偏好筆記已被徹底清空！"
-        
     elif normalized_text.startswith("設定目標：") or normalized_text.startswith("設定目標:"):
         target = raw_text.split("：")[-1].split(":")[-1].strip()
         supabase.table('research_targets').insert({"target": target, "username": username}).execute()
         yield f"🎯 [{username}] 的目標已設定：『{target}』"
-        
-    elif normalized_text == "自主學習":
-        res = supabase.table('research_targets').select('target').eq('username', username).order('id', desc=True).limit(1).execute()
-        target_str = res.data[0]['target'] if res.data else "2026年AI最新突破"
-        yield f"🚀 正在為 [{username}] 針對『{target_str}』進行深度學習..."
-        yield ask_smart_agent(f"針對『{target_str}』搜尋最新趨勢並整理報告。", [], history, username)
-        
     else:
-        yield ask_smart_agent(text, files, history, username)
+        # ✅ 支援回傳實體檔案的特殊邏輯
+        reply = ask_smart_agent(text, files, history, username)
+        if isinstance(reply, tuple):  # 偵測到是檔案
+            yield "📝 報告內容已撰寫完成，正在為您打包成檔案..."
+            time.sleep(0.5)
+            yield reply # 直接丟出檔案讓網頁顯示下載氣泡
+        else:
+            yield reply
 
 demo = gr.ChatInterface(
-    fn=chat_logic, 
-    multimodal=True, 
-    title="🚀 可進化 AI 助理 V22 (產圖 + 檔案解鎖完美版)",
+    fn=chat_logic,
+    multimodal=True,
+    title="🚀 可進化 AI 助理 V28 (PDF/DOCX 雙輸出完全體)",
     description="具備多用戶隔離與 RAG 記憶的頂級架構。<br>👇 **請手動輸入，或點擊下方的【快捷指令按鈕】：**",
     examples=[
-        [{"text": "自主學習"}],
-        [{"text": "幫我畫一隻在太空彈吉他的橘貓"}],
+        [{"text": "幫我規劃三天兩夜的高雄旅遊行程，並存成PDF"}],
+        [{"text": "幫我寫一份中秋節烤肉採買清單，並存成Word檔案"}],
         [{"text": "清除所有對話紀錄"}],
         [{"text": "設定目標：2026年人工智慧發展趨勢"}]
     ]
 )
 
-# --- 5. 全自動背景排程 ---
-def daily_background_learning():
-    print("⏰ [定時任務] 啟動每日全自動自主學習...")
-    if not supabase or not client: return
-    try:
-        res = supabase.table('research_targets').select('username, target').execute()
-        if not res.data: return
-        unique_users = {row['username']: row['target'] for row in res.data}
-        for user, target in unique_users.items():
-            print(f"🔄 正在為用戶 [{user}] 學習目標: {target}")
-            ask_smart_agent(f"請針對『{target}』進行今日的最新進度總結報告。", [], [], user)
-            time.sleep(10)
-        print("✅ [定時任務] 今日全自動學習完成！")
-    except Exception as e:
-        print(f"背景任務錯誤: {e}")
-
-def run_scheduler():
-    schedule.every().day.at("03:00").do(daily_background_learning)
-    while True:
-        schedule.run_pending()
-        time.sleep(60)
-
-threading.Thread(target=run_scheduler, daemon=True).start()
+# ⚠️ 自動背景任務暫時關閉，避免吃光免費用戶的每日額度
+# def daily_background_learning(): ...
+# def run_scheduler(): ...
+# threading.Thread(target=run_scheduler, daemon=True).start()
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 7860))
