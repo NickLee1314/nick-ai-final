@@ -29,7 +29,7 @@ if users_env:
             parts = pair.split(':', 1)
             if len(parts) == 2:
                 username = parts[0].strip()
-                password = parts.strip()
+                password = parts[1].strip()
                 if username and password:
                     AUTH_LIST.append((username, password))
 
