@@ -264,7 +264,7 @@ def run_scheduler():
         schedule.run_pending()
         time.sleep(60)
 
-#threading.Thread(target=run_scheduler, daemon=True).start()
+threading.Thread(target=run_scheduler, daemon=True).start()
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 7860))
