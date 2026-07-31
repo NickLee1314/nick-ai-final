@@ -108,7 +108,7 @@ def ask_smart_agent(user_text, uploaded_files, history, username):
                 return f"❌ 檔案上傳失敗: {e}"
     
     try:
-        response = client.models.generate_content(model='gemini-1.5-pro-latest', contents=contents_to_send)
+        response = client.models.generate_content(model='gemini-3.6-flash', contents=contents_to_send)
         final_answer = response.text
         db_question = user_text if user_text else "[分析了上傳的檔案]"
         supabase.table('memory').insert({"question": db_question, "answer": final_answer, "username": username}).execute()
